@@ -1,0 +1,224 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Macro Final Boss</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { margin:0; font-family:-apple-system; background:#0b0d17; color:white;}
+.container { padding:20px; padding-bottom:90px;}
+.header { font-size:28px; font-weight:600;}
+.orange { color:#ff8c3a;}
+.big { font-size:44px;}
+.sub { color:#aaa;}
+.progress { height:8px; background:#1c1f2e; border-radius:10px; overflow:hidden; margin:6px 0;}
+.bar { height:8px; background:#ff8c3a;}
+.section { margin:20px 0;}
+.fab { position:fixed; bottom:80px; right:20px; width:60px; height:60px; background:#ff8c3a; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px;}
+.nav { position:fixed; bottom:0; width:100%; display:flex; justify-content:space-around; background:#0b0d17; padding:10px 0; border-top:1px solid #1c1f2e;}
+input, select { width:100%; padding:12px; margin:5px 0; border-radius:10px; border:none; background:#1c1f2e; color:white;}
+button { width:100%; padding:12px; border:none; border-radius:10px; background:#ff8c3a; color:white; font-weight:bold;}
+.suggestion { background:#1c1f2e; padding:10px; margin-top:5px; border-radius:8px;}
+.small { font-size:12px; color:#aaa;}
+</style>
+</head>
+<body>
+
+<div class="container" id="today">
+<div class="header">macro<span class="orange">.</span></div>
+<div class="big" id="cal">0 kcal</div>
+<div class="sub"><span class="orange" id="left"></span> remaining</div>
+
+<div class="section">
+Protein<div class="progress"><div id="pbar" class="bar"></div></div>
+Carbs<div class="progress"><div id="cbar" class="bar"></div></div>
+Fat<div class="progress"><div id="fbar" class="bar"></div></div>
+</div>
+
+<div class="section">
+Steps<div class="progress"><div id="sbar" class="bar"></div></div>
+</div>
+
+<div class="section">
+<p id="projection"></p>
+<p id="checkin"></p>
+</div>
+</div>
+
+<div class="container" id="log" style="display:none;">
+<input id="food" oninput="suggestFood()" placeholder="type food">
+<div id="suggestions"></div>
+<input id="amt" placeholder="grams" type="number">
+<button onclick="addFood()">Add Food</button>
+
+<h4>Saved Meals</h4>
+<button onclick="saveMeal()">Save Current Meal</button>
+<div id="meals"></div>
+
+<input id="steps" placeholder="steps" type="number">
+<button onclick="saveSteps()">Save Steps</button>
+
+<input id="weight" placeholder="weight" type="number">
+<button onclick="logWeight()">Log Weight</button>
+
+<h4>Backup</h4>
+<button onclick="exportData()">Export Data</button>
+<input type="file" onchange="importData(event)">
+</div>
+
+<div class="container" id="progress" style="display:none;">
+<canvas id="chart"></canvas>
+</div>
+
+<div class="fab" onclick="showTab('log')">+</div>
+
+<div class="nav">
+<div onclick="showTab('today')">Today</div>
+<div onclick="showTab('log')">Log</div>
+<div onclick="showTab('progress')">Progress</div>
+</div>
+
+<script>
+let target = {cal:1500,p:120,c:150,f:50,steps:10000,goal:120};
+
+let data = JSON.parse(localStorage.getItem("data")) || {cal:0,p:0,c:0,f:0,steps:0,weights:[],meals:[]};
+
+const db = {
+ chicken:{cal:165,p:31,c:0,f:3.6},
+ rice:{cal:130,p:2.7,c:28,f:0.3},
+ egg:{cal:155,p:13,c:1,f:11},
+ oats:{cal:389,p:17,c:66,f:7},
+ salmon:{cal:208,p:20,c:0,f:13},
+ beef:{cal:250,p:26,c:0,f:15},
+ bread:{cal:265,p:9,c:49,f:3},
+ banana:{cal:89,p:1,c:23,f:0}
+};
+
+function update(){
+ document.getElementById("cal").innerText = Math.round(data.cal)+" kcal";
+ document.getElementById("left").innerText = Math.max(target.cal-data.cal,0);
+
+ document.getElementById("pbar").style.width = (data.p/target.p*100)+"%";
+ document.getElementById("cbar").style.width = (data.c/target.c*100)+"%";
+ document.getElementById("fbar").style.width = (data.f/target.f*100)+"%";
+ document.getElementById("sbar").style.width = (data.steps/target.steps*100)+"%";
+
+ if(data.weights.length > 1){
+   let start = data.weights[0];
+   let current = data.weights[data.weights.length-1];
+   let remaining = current - target.goal;
+   document.getElementById("projection").innerText = "Approx weeks left: " + Math.abs(Math.round(remaining));
+ }
+
+ document.getElementById("checkin").innerText = "Weekly check-in: stay consistent 🔥";
+
+ renderMeals();
+
+ localStorage.setItem("data", JSON.stringify(data));
+}
+
+function suggestFood(){
+ let input = document.getElementById("food").value.toLowerCase();
+ let html="";
+ for(let key in db){
+  if(key.includes(input)){
+    html += "<div class='suggestion' onclick='selectFood(""+key+"")'>"+key+"</div>";
+  }
+ }
+ document.getElementById("suggestions").innerHTML=html;
+}
+
+function selectFood(f){
+ document.getElementById("food").value=f;
+ document.getElementById("suggestions").innerHTML="";
+}
+
+function addFood(){
+ let f=document.getElementById("food").value.toLowerCase();
+ let a=document.getElementById("amt").value;
+ if(db[f]){
+  data.cal+=db[f].cal*a/100;
+  data.p+=db[f].p*a/100;
+  data.c+=db[f].c*a/100;
+  data.f+=db[f].f*a/100;
+ }
+ update();
+}
+
+function saveMeal(){
+ data.meals.push({...data});
+ update();
+}
+
+function renderMeals(){
+ let html="";
+ data.meals.forEach((m,i)=>{
+  html += "<div class='suggestion'>Meal "+(i+1)+" <button onclick='loadMeal("+i+")'>Load</button></div>";
+ });
+ document.getElementById("meals").innerHTML=html;
+}
+
+function loadMeal(i){
+ let m=data.meals[i];
+ data.cal+=m.cal;
+ data.p+=m.p;
+ data.c+=m.c;
+ data.f+=m.f;
+ update();
+}
+
+function saveSteps(){
+ data.steps=document.getElementById("steps").value;
+ update();
+}
+
+function logWeight(){
+ data.weights.push(document.getElementById("weight").value);
+ updateChart();
+ update();
+}
+
+function exportData(){
+ const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+ const a = document.createElement("a");
+ a.href = URL.createObjectURL(blob);
+ a.download = "macro-data.json";
+ a.click();
+}
+
+function importData(e){
+ const file = e.target.files[0];
+ const reader = new FileReader();
+ reader.onload = function(){
+  data = JSON.parse(reader.result);
+  update();
+  updateChart();
+ };
+ reader.readAsText(file);
+}
+
+function updateChart(){
+ chart.data.labels = data.weights.map((_,i)=>i+1);
+ chart.data.datasets[0].data = data.weights;
+ chart.update();
+}
+
+function showTab(tab){
+ document.getElementById("today").style.display="none";
+ document.getElementById("log").style.display="none";
+ document.getElementById("progress").style.display="none";
+ document.getElementById(tab).style.display="block";
+}
+
+const chart = new Chart(document.getElementById('chart'), {
+ type:'line',
+ data:{labels:[], datasets:[{label:'Weight', data:[]}]}
+});
+
+update();
+</script>
+
+</body>
+</html>
