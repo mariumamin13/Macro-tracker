@@ -4,88 +4,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Macro Tracker</title>
+<title>macro.</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
 body { margin:0; font-family:-apple-system; background:#0b0d17; color:white;}
-.container { padding:20px; padding-bottom:90px;}
+.container { padding:20px; padding-bottom:100px;}
 .header { font-size:28px; font-weight:600;}
 .orange { color:#ff8c3a;}
 .big { font-size:44px;}
-.progress { height:8px; background:#1c1f2e; border-radius:10px; overflow:hidden; margin:6px 0;}
+.sub { color:#aaa;}
+.card { background:#111425; padding:15px; border-radius:16px; margin-top:15px;}
+.progress { height:8px; background:#1c1f2e; border-radius:10px; overflow:hidden;}
 .bar { height:8px; background:#ff8c3a;}
-.fab { position:fixed; bottom:80px; right:20px; width:60px; height:60px; background:#ff8c3a; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px;}
-.nav { position:fixed; bottom:0; width:100%; display:flex; justify-content:space-around; background:#0b0d17; padding:10px 0;}
-input, button { width:100%; padding:12px; margin:5px 0; border-radius:10px; border:none;}
+input, button, select { width:100%; padding:14px; margin-top:10px; border-radius:12px; border:none;}
+input, select { background:#1c1f2e; color:white;}
+button { background:#ff8c3a; color:white; font-weight:600;}
+.fab { position:fixed; bottom:90px; right:20px; width:65px; height:65px; border-radius:50%; background:#ff8c3a; display:flex; align-items:center; justify-content:center; font-size:32px;}
+.nav { position:fixed; bottom:0; width:100%; display:flex; justify-content:space-around; background:#0b0d17; padding:12px 0;}
+.suggestion { background:#1c1f2e; padding:10px; border-radius:10px; margin-top:5px;}
 </style>
 </head>
 
 <body>
 
+<!-- TODAY -->
 <div class="container" id="today">
 <div class="header">macro<span class="orange">.</span></div>
+
 <div class="big" id="cal">0 kcal</div>
+<div class="sub" id="remaining"></div>
 
-<div>
-Protein<div class="progress"><div id="pbar" class="bar"></div></div>
-Carbs<div class="progress"><div id="cbar" class="bar"></div></div>
-Fat<div class="progress"><div id="fbar" class="bar"></div></div>
-</div>
+<div class="card">Protein<div class="progress"><div id="pbar" class="bar"></div></div></div>
+<div class="card">Carbs<div class="progress"><div id="cbar" class="bar"></div></div></div>
+<div class="card">Fat<div class="progress"><div id="fbar" class="bar"></div></div></div>
+<div class="card">Steps<div class="progress"><div id="sbar" class="bar"></div></div></div>
+
+<div class="card">
+<p id="suggestion"></p>
+<p id="projection"></p>
 </div>
 
+</div>
+
+<!-- LOG -->
 <div class="container" id="log" style="display:none;">
-<input id="food" placeholder="food">
-<input id="amt" placeholder="grams" type="number">
+
+<input id="food" oninput="suggestFood()" placeholder="type food...">
+<div id="suggestions"></div>
+
+<input id="amount" placeholder="grams" type="number">
 <button onclick="addFood()">Add Food</button>
+
+<h4>Saved Meals</h4>
+<button onclick="saveMeal()">Save Current</button>
+<div id="meals"></div>
+
+<input id="steps" placeholder="steps" type="number">
+<button onclick="saveSteps()">Save Steps</button>
+
+<input id="weight" placeholder="weight" type="number">
+<button onclick="logWeight()">Log Weight</button>
+
 </div>
 
-<div class="fab" onclick="openLog()">+</div>
+<!-- PROGRESS -->
+<div class="container" id="progress" style="display:none;">
+<canvas id="chart"></canvas>
+</div>
+
+<div class="fab" onclick="showTab('log')">+</div>
 
 <div class="nav">
 <div onclick="showTab('today')">Today</div>
 <div onclick="showTab('log')">Log</div>
+<div onclick="showTab('progress')">Progress</div>
 </div>
 
 <script>
-let data = {cal:0,p:0,c:0,f:0};
 
-const db = {
- chicken:{cal:165,p:31,c:0,f:3.6},
- rice:{cal:130,p:2.7,c:28,f:0.3}
+let target = {cal:1500,p:120,c:150,f:50,steps:10000,goal:120};
+
+let data = JSON.parse(localStorage.getItem("data")) || {
+ cal:0,p:0,c:0,f:0,steps:0,weights:[],meals:[]
 };
 
-function openLog(){
- showTab('log');
-}
+const foods = {
+ chicken:{cal:165,p:31,c:0,f:3.6},
+ rice:{cal:130,p:2.7,c:28,f:0.3},
+ egg:{cal:155,p:13,c:1,f:11},
+ salmon:{cal:208,p:20,c:0,f:13},
+ oats:{cal:389,p:17,c:66,f:7},
+ banana:{cal:89,p:1,c:23,f:0.3},
+ bread:{cal:265,p:9,c:49,f:3}
+};
 
 function showTab(tab){
  document.getElementById("today").style.display="none";
  document.getElementById("log").style.display="none";
+ document.getElementById("progress").style.display="none";
  document.getElementById(tab).style.display="block";
+}
+
+function suggestFood(){
+ let input = document.getElementById("food").value.toLowerCase();
+ let html="";
+ for(let key in foods){
+  if(key.includes(input)){
+    html += `<div class="suggestion" onclick="selectFood('${key}')">${key}</div>`;
+  }
+ }
+ document.getElementById("suggestions").innerHTML = html;
+}
+
+function selectFood(f){
+ document.getElementById("food").value = f;
+ document.getElementById("suggestions").innerHTML="";
 }
 
 function addFood(){
  let f=document.getElementById("food").value.toLowerCase();
- let a=document.getElementById("amt").value;
+ let a=document.getElementById("amount").value;
 
- if(db[f]){
-  data.cal += db[f].cal*a/100;
-  data.p += db[f].p*a/100;
-  data.c += db[f].c*a/100;
-  data.f += db[f].f*a/100;
+ if(foods[f]){
+  data.cal+=foods[f].cal*a/100;
+  data.p+=foods[f].p*a/100;
+  data.c+=foods[f].c*a/100;
+  data.f+=foods[f].f*a/100;
  }
 
+ save();
+ update();
+}
+
+function saveSteps(){
+ data.steps=document.getElementById("steps").value;
+ save();
+ update();
+}
+
+function logWeight(){
+ let w=document.getElementById("weight").value;
+ data.weights.push(w);
+ updateChart();
+ save();
+ update();
+}
+
+function saveMeal(){
+ data.meals.push({...data});
+ renderMeals();
+ save();
+}
+
+function renderMeals(){
+ let html="";
+ data.meals.forEach((m,i)=>{
+  html += `<div class="suggestion">Meal ${i+1} <button onclick="loadMeal(${i})">Load</button></div>`;
+ });
+ document.getElementById("meals").innerHTML=html;
+}
+
+function loadMeal(i){
+ let m=data.meals[i];
+ data.cal+=m.cal;
+ data.p+=m.p;
+ data.c+=m.c;
+ data.f+=m.f;
  update();
 }
 
 function update(){
  document.getElementById("cal").innerText = Math.round(data.cal)+" kcal";
- document.getElementById("pbar").style.width = (data.p/120*100)+"%";
- document.getElementById("cbar").style.width = (data.c/150*100)+"%";
- document.getElementById("fbar").style.width = (data.f/50*100)+"%";
+ document.getElementById("remaining").innerText = Math.max(target.cal-data.cal,0)+" remaining";
+
+ document.getElementById("pbar").style.width = (data.p/target.p*100)+"%";
+ document.getElementById("cbar").style.width = (data.c/target.c*100)+"%";
+ document.getElementById("fbar").style.width = (data.f/target.f*100)+"%";
+ document.getElementById("sbar").style.width = (data.steps/target.steps*100)+"%";
+
+ let suggestion="Stay on track";
+ if(data.p<80) suggestion="Eat more protein";
+ else if(data.cal<1200) suggestion="You can eat more";
+
+ document.getElementById("suggestion").innerText = suggestion;
+
+ if(data.weights.length>1){
+  let remaining = data.weights[data.weights.length-1] - target.goal;
+  document.getElementById("projection").innerText = "Weeks to goal: ~"+Math.abs(Math.round(remaining));
+ }
+
+ renderMeals();
+}
+
+function save(){
+ localStorage.setItem("data", JSON.stringify(data));
+}
+
+const chart = new Chart(document.getElementById('chart'), {
+ type:'line',
+ data:{labels:[], datasets:[{label:'Weight', data:[]}]}
+});
+
+function updateChart(){
+ chart.data.labels = data.weights.map((_,i)=>i+1);
+ chart.data.datasets[0].data = data.weights;
+ chart.update();
 }
 
 update();
+updateChart();
+
 </script>
 
 </body>
